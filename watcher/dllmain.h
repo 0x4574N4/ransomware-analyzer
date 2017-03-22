@@ -3,15 +3,23 @@
 
 #ifndef _dllmain_h_
 #define _dllmain_h_
+// include header files
+#include <math.h>
+#include <stdio.h>
+#include <Windows.h>
+#include <Psapi.h>
+#pragma comment (lib,"psapi.lib")
+#include <Shlwapi.h>
+#pragma comment (lib,"shlwapi.lib")
+#include "C:\Program Files (x86)\Microsoft Research\Detours Express 3.0\include\detours.h"
+#pragma comment (lib, "C:\\Program Files (x86)\\Microsoft Research\\Detours Express 3.0\\lib.X86\\detours.lib")
 
 // define constants
 #define MAX_FILESIZE_BACKUP 102400 // max size of file for archiving
 #define MAX_FILESIZE_ENTROPY 10240 // max size of file for entropy calculating
 #define MAX_FILESIZE_INTEGRITY 1024000 // max size of file for integrity checking
 #define BUFFER 1024 // size of buffer to read
-#define PATH_LOG		L"C:\\Windows\\ransomware_analyzer\\log\\log_%d.dll"
-#define PATH_LOGBAN		L"C:\\Windows\\ransomware_analyzer\\log\\log_ban.dll"
-#define PATH_LOGMAIN	L"C:\\Windows\\ransomware_analyzer\\log\\log_main.dll"
+#define PATH_LOG L"C:\\Windows\\ransomware_analyzer\\log\\log_%d.dll"
 #define MINIZ_HEADER_FILE_ONLY
 
 typedef unsigned char uint8;
