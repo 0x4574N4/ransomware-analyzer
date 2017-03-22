@@ -64,7 +64,7 @@ int main(void) {
 	DWORD dwSize = 0;
 	DWORD dwExitCode = 0;
 	WCHAR szRecord[1000] = {0};
-	WCHAR LibPath [] = L"C:\\Windows\\ransomware_blocker\\watcher.dll"; // path to injecting lib
+	WCHAR LibPath [] = L"C:\\Windows\\ransomware_analyzer\\watcher.dll"; // path to injecting lib
 	LPVOID LoadLibraryAddr;
 	LPVOID LLParam;
 	BOOL flag; // flag
@@ -101,7 +101,7 @@ int main(void) {
 				LoadLibraryAddr = GetProcAddress(GetModuleHandle(L"kernel32.dll"), "LoadLibraryW");
 				LLParam = VirtualAllocEx(hProcess, NULL, sizeof(LibPath), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 				WriteProcessMemory(hProcess, LLParam, LibPath, sizeof(LibPath), NULL);
-				hThread = CreateRemoteThread(hProcess, NULL, NULL, (LPTHREAD_START_ROUTINE) LoadLibraryAddr, LLParam, NULL, NULL);
+				hThread = CreateRemoteThread(hProcess, NULL, NULL, (LPTHREAD_START_ROUTINE)LoadLibraryAddr, LLParam, NULL, NULL);
 
 				// check for success
 				dwExitCode = 0;
