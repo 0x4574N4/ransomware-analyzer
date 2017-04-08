@@ -40,14 +40,13 @@ void logMessage (WCHAR* szMsg) {
 // check if file has protected extension
 BOOL checkFileExtension (LPCWSTR lpFileName) {
 	// list of protected extensions
-	WCHAR *szExtension = PathFindExtensionW(lpFileName);
 	WCHAR aszProtected[13][6] = {L".docx", L".doc", L".pptx", L".ppt", L".xslx", L".xsl", L".pdf", L".rtf", L".jpg", L".jpeg", L".png", L".zip", L".rar"};
 	
-	// is length of extension greater than zero
-	if (wcslen(szExtension) > 0) {
+	// is length of filename greater than zero
+	if (wcslen(lpFileName) > 0) {
 		// run on list of protected extensions
 		for (DWORD i = 0; i < 13; i++) {
-			if (_wcsicmp(szExtension, &aszProtected[i][0]) == 0) {
+			if (wcsstr(lpFileName, &aszProtected[i][0])) {
 				return TRUE; // if extension found at list, then return TRUE
 			}
 		}
@@ -375,20 +374,19 @@ __declspec(dllexport) HANDLE WINAPI MyCreateFileW (LPCWSTR lpFileName, DWORD dwD
 	WCHAR szMsg[1000] = {0};
 	WCHAR szInfo[100] = {0};
 	WCHAR szIntegrity[100] = {0};
-	DWORD dwAttrib = INVALID_FILE_ATTRIBUTES;
 	DWORD dwFileSize = INVALID_FILE_SIZE;
 	BYTE abSignature[4] = {0};
 	BOOL bIntegrity = FALSE;
 	double dblEntropy = 0;
 
-	// check existence of file
-	dwAttrib = GetFileAttributesW(lpFileName);
-
 	// if process trying to access to file with protected extension
-	if (checkFileExtension(lpFileName) && (dwAttrib != INVALID_FILE_ATTRIBUTES)) {
+	if (checkFileExtension(lpFileName)) {
 		// get main file info
 		if (getFileInfo(lpFileName, &dwFileSize, abSignature, &dblEntropy)) {
 			swprintf_s(szInfo, L"FileSize = %d, Signature = %02x %02x %02x %02x; Entropy = %fl;", dwFileSize, abSignature[0], abSignature[1], abSignature[2], abSignature[3], dblEntropy);
+		}
+		else {
+			swprintf_s(szInfo, L"File not exist");
 		}
 
 		// check integrity of file
@@ -428,7 +426,6 @@ __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 	WCHAR szMsg[1000];
 	WCHAR szInfo[100] = {0};
 	WCHAR szIntegrity[100] = {0};
-	DWORD dwAttrib = INVALID_FILE_ATTRIBUTES;
 	DWORD dwFileSize = INVALID_FILE_SIZE;
 	BYTE abSignature[4] = {0};
 	BOOL bIntegrity = FALSE;
@@ -439,16 +436,12 @@ __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 		// if fails, manually set FileName
 		wcscpy_s (szPath, L"unknown");
 	}
-	else {
-		// check existence of file
-		dwAttrib = GetFileAttributesW(szPath);
-	}
 
 	// get result of true function
 	BOOL bResult = TrueCloseHandle(hObject);
 
 	// if process trying to access to file with protected extension or to protected drive
-	if (checkFileExtension(szPath) && (dwAttrib != INVALID_FILE_ATTRIBUTES)) {
+	if (checkFileExtension(szPath)) {
 		// get main file info
 		if (getFileInfo(szPath, &dwFileSize, abSignature, &dblEntropy)) {
 			swprintf_s(szInfo, L"FileSize = %d, Signature = %02x %02x %02x %02x; Entropy = %fl;", dwFileSize, abSignature[0], abSignature[1], abSignature[2], abSignature[3], dblEntropy);
