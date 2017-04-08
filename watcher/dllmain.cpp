@@ -15,13 +15,13 @@ void logMessage (WCHAR* szMsg) {
 
 	if (szMsg != NULL) {
 		// generate filename
-		swprintf(szLog, PATH_LOG, GetCurrentProcessId());
+		swprintf_s(szLog, PATH_LOG, GetCurrentProcessId());
 
 		// get path of current process and set ransomware flag
 		GetModuleFileName(NULL, szPath, MAX_PATH);
 
 		// generate string
-		swprintf(szRecord, L"%ls (id = %d): %ls\r\n", szPath, GetCurrentProcessId(), szMsg);
+		swprintf_s(szRecord, L"%ls (id = %d): %ls\r\n", szPath, GetCurrentProcessId(), szMsg);
 
 		// open log file
 		hLog = TrueCreateFileW(szLog, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -215,12 +215,12 @@ BOOL checkDrive (LPCWSTR lpDriveName) {
 
 	// run throw all drives [A-Z]
 	for (DWORD ci = 0; ci < 26; ci++) {
-		swprintf(szDrive, L"%c:\\", 'A'+ci); // convert bit to letter
+		swprintf_s(szDrive, L"%c:\\", 'A'+ci); // convert bit to letter
 		if (((Drives >> ci) & 0x1) == 0x1) {
 			// we need for only HDDs
 			if (GetDriveType(szDrive) == DRIVE_FIXED) {
 				// check if we can access it
-				swprintf(szDrive, L"\\\\.\\%c:", 'A'+ci);
+				swprintf_s(szDrive, L"\\\\.\\%c:", 'A'+ci);
 
 				// compare szDrive (example "\\.\C:") with input value lpDriveName
 				if (_wcsicmp(szDrive, lpDriveName) == 0) {
@@ -235,7 +235,7 @@ BOOL checkDrive (LPCWSTR lpDriveName) {
 						// get number of the phisical drive
 						for (DWORD cj = 0; cj < diskExtents.NumberOfDiskExtents; cj++) {
 							// add drive name to list
-							swprintf(szDrive, L"\\\\.\\PhysicalDrive%d", diskExtents.Extents[cj].DiskNumber);
+							swprintf_s(szDrive, L"\\\\.\\PhysicalDrive%d", diskExtents.Extents[cj].DiskNumber);
 
 							// compare szDrive (example "\\.\C:") with input value lpDriveName
 							if (_wcsicmp(szDrive, lpDriveName) == 0) {
@@ -259,10 +259,10 @@ BOOL checkDrive (LPCWSTR lpDriveName) {
 // _out_ dblEntropy = shannon's entropy
 // 1 - get signature
 // 2 - count Entropy
-BOOL getFileInfo(LPCWSTR lpFileName, BYTE abSignature[4], double *lpEntropy) {
+BOOL getFileInfo(LPCWSTR lpFileName, DWORD *dwFileSize, BYTE abSignature[4], double *lpEntropy) {
 	HANDLE hFile = NULL;
 	DWORD dwPos = 0;   // file pointer
-	DWORD dwSize = 0;  // size of file
+	DWORD dwSize = 0;  // size of file (for pieces)
 	DWORD dwCount = 0; // counter of readen bytes
 	DWORD dwRatio = 0; // ratio [size of file]/[size of block to be read]
 	DWORD aBytes[256] = {0}; // array of bytes for calculating of probability
@@ -276,8 +276,8 @@ BOOL getFileInfo(LPCWSTR lpFileName, BYTE abSignature[4], double *lpEntropy) {
 	}
 
 	// get size of file
-	dwSize = GetFileSize(hFile, NULL);
-	if ((dwSize == INVALID_FILE_SIZE) || (dwSize < 4)) {
+	*dwFileSize = GetFileSize(hFile, NULL);
+	if ((*dwFileSize == INVALID_FILE_SIZE) || (*dwFileSize < 4)) {
 		TrueCloseHandle(hFile);
 		return FALSE;
 	}
@@ -303,7 +303,7 @@ BOOL getFileInfo(LPCWSTR lpFileName, BYTE abSignature[4], double *lpEntropy) {
 	}
 
 	// set ratio
-	dwRatio = dwSize / (MAX_FILESIZE_ENTROPY);
+	dwRatio = *dwFileSize / (MAX_FILESIZE_ENTROPY);
 
 	// main work
 	dwSize = 0;
@@ -360,7 +360,7 @@ __declspec(dllexport) BOOL WINAPI MyCreateProcessW (LPCWSTR lpApplicationName, L
 	// find suspicious substrings
 	if (StrStrIW(lpApplicationName, L"vssadmin") || StrStrIW(lpCommandLine, L"vssadmin") || StrStrIW(lpApplicationName, L"shadowcopy") || StrStrIW(lpCommandLine, L"shadowcopy")) {
 		// create message for log
-		swprintf(szMsg, L"CreateProcess (ApplicationName = \"%ls\", CommandLine = \"%ls\") = %ls", lpApplicationName, lpCommandLine, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"CreateProcess (ApplicationName = \"%ls\", CommandLine = \"%ls\") = %ls", lpApplicationName, lpCommandLine, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -371,9 +371,12 @@ __declspec(dllexport) BOOL WINAPI MyCreateProcessW (LPCWSTR lpApplicationName, L
 // hooking function for CreateFileW
 __declspec(dllexport) HANDLE WINAPI MyCreateFileW (LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile)
 {
-	HANDLE hResult;
-	WCHAR szMsg[1000];
+	HANDLE hResult = NULL;
+	WCHAR szMsg[1000] = {0};
+	WCHAR szInfo[100] = {0};
+	WCHAR szIntegrity[100] = {0};
 	DWORD dwAttrib = INVALID_FILE_ATTRIBUTES;
+	DWORD dwFileSize = INVALID_FILE_SIZE;
 	BYTE abSignature[4] = {0};
 	BOOL bIntegrity = FALSE;
 	double dblEntropy = 0;
@@ -384,22 +387,20 @@ __declspec(dllexport) HANDLE WINAPI MyCreateFileW (LPCWSTR lpFileName, DWORD dwD
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(lpFileName) && (dwAttrib != INVALID_FILE_ATTRIBUTES)) {
 		// get main file info
-		getFileInfo(lpFileName, abSignature, &dblEntropy);
+		if (getFileInfo(lpFileName, &dwFileSize, abSignature, &dblEntropy)) {
+			swprintf_s(szInfo, L"FileSize = %d, Signature = %02x %02x %02x %02x; Entropy = %fl;", dwFileSize, abSignature[0], abSignature[1], abSignature[2], abSignature[3], dblEntropy);
+		}
 
 		// check integrity of file
 		if (checkZipFileExtension(lpFileName)) {
-			bIntegrity = checkZipIntegrity(lpFileName);
-		}
-		else {
-			bIntegrity = FALSE;
+			swprintf_s(szIntegrity, L"Integrity = %ls;", checkZipIntegrity(lpFileName) ? L"TRUE" : L"FALSE");
 		}
 
 		// get result of true function
 		hResult = TrueCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 		// create message for log
-		swprintf(szMsg, L"CreateFile (FileName = \"%ls\", DesiredAccess = %d) = %p; Signature = %02x %02x %02x %02x; Entropy = %fl; Integrity = %ls",
-			lpFileName, dwDesiredAccess, hResult, abSignature[0], abSignature[1], abSignature[2], abSignature[3], dblEntropy, bIntegrity ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"CreateFile (FileName = \"%ls\", DesiredAccess = %d) = %p; %ls %ls", lpFileName, dwDesiredAccess, hResult, szInfo, szIntegrity);
 		logMessage(szMsg);
 	}
 	// if process trying to access to protected drive
@@ -408,7 +409,7 @@ __declspec(dllexport) HANDLE WINAPI MyCreateFileW (LPCWSTR lpFileName, DWORD dwD
 		hResult = TrueCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 		// create message for log
-		swprintf(szMsg, L"CreateFile (FileName = \"%ls\", DesiredAccess = %d) = %p", lpFileName, dwDesiredAccess, hResult);
+		swprintf_s(szMsg, L"CreateFile (FileName = \"%ls\", DesiredAccess = %d) = %p", lpFileName, dwDesiredAccess, hResult);
 		logMessage(szMsg);
 	}
 	else {
@@ -425,7 +426,10 @@ __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 {
 	WCHAR szPath[MAX_PATH+1];
 	WCHAR szMsg[1000];
+	WCHAR szInfo[100] = {0};
+	WCHAR szIntegrity[100] = {0};
 	DWORD dwAttrib = INVALID_FILE_ATTRIBUTES;
+	DWORD dwFileSize = INVALID_FILE_SIZE;
 	BYTE abSignature[4] = {0};
 	BOOL bIntegrity = FALSE;
 	double dblEntropy = 0;
@@ -433,7 +437,7 @@ __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hObject, szPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy (szPath, L"unknown");
+		wcscpy_s (szPath, L"unknown");
 	}
 	else {
 		// check existence of file
@@ -446,19 +450,17 @@ __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 	// if process trying to access to file with protected extension or to protected drive
 	if (checkFileExtension(szPath) && (dwAttrib != INVALID_FILE_ATTRIBUTES)) {
 		// get main file info
-		getFileInfo(szPath, abSignature, &dblEntropy);
+		if (getFileInfo(szPath, &dwFileSize, abSignature, &dblEntropy)) {
+			swprintf_s(szInfo, L"FileSize = %d, Signature = %02x %02x %02x %02x; Entropy = %fl;", dwFileSize, abSignature[0], abSignature[1], abSignature[2], abSignature[3], dblEntropy);
+		}
 
 		// check integrity of file
 		if (checkZipFileExtension(szPath)) {
-			bIntegrity = checkZipIntegrity(szPath);
-		}
-		else {
-			bIntegrity = FALSE;
+			swprintf_s(szIntegrity, L"Integrity = %ls;", checkZipIntegrity(szPath) ? L"TRUE" : L"FALSE");
 		}
 
 		// create message for log
-		swprintf(szMsg, L"CloseHandle (Object = \"%p\", FileName = \"%ls\") = %ls; Signature = %02x %02x %02x %02x; Entropy = %fl; Integrity = %ls",
-			hObject, szPath, bResult ? L"TRUE" : L"FALSE", abSignature[0], abSignature[1], abSignature[2], abSignature[3], dblEntropy, bIntegrity ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"CloseHandle (Object = \"%p\", FileName = \"%ls\") = %ls; %ls %ls", hObject, szPath, bResult ? L"TRUE" : L"FALSE", szInfo, szIntegrity);
 		logMessage(szMsg);
 	}
 
@@ -477,7 +479,7 @@ __declspec(dllexport) BOOL WINAPI MyDeleteFileW (LPCWSTR lpFileName)
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(lpFileName)) {
 		// create message for log
-		swprintf(szMsg, L"DeleteFileW (FileName = \"%ls\") = %ls", lpFileName, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"DeleteFileW (FileName = \"%ls\") = %ls", lpFileName, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -496,7 +498,7 @@ __declspec(dllexport) BOOL WINAPI MyDeleteFileTransactedW (LPCWSTR lpFileName, H
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(lpFileName)) {
 		// create message for log
-		swprintf(szMsg, L"DeleteFileTransactedW (FileName = \"%ls\", Transaction = \"%p\") = %ls", lpFileName, hTransaction, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"DeleteFileTransactedW (FileName = \"%ls\", Transaction = \"%p\") = %ls", lpFileName, hTransaction, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -514,12 +516,12 @@ __declspec(dllexport) BOOL WINAPI MyDeleteFileA (LPCSTR lpFileName)
 	BOOL bResult = TrueDeleteFileA (lpFileName);
 
 	// convert ANSI to UNICODE filename
-	swprintf(szFileName, MAX_PATH+1, L"%hs", lpFileName);
+	swprintf_s(szFileName, MAX_PATH+1, L"%hs", lpFileName);
 
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(szFileName)) {
 		// create message for log
-		swprintf(szMsg, L"DeleteFileA (FileName = \"%ls\") = %ls", szFileName, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"DeleteFileA (FileName = \"%ls\") = %ls", szFileName, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -537,12 +539,12 @@ __declspec(dllexport) BOOL WINAPI MyDeleteFileTransactedA (LPCSTR lpFileName, HA
 	BOOL bResult = TrueDeleteFileTransactedA (lpFileName, hTransaction);
 
 	// convert ANSI to UNICODE filename
-	swprintf(szFileName, MAX_PATH+1, L"%hs", lpFileName);
+	swprintf_s(szFileName, MAX_PATH+1, L"%hs", lpFileName);
 
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(szFileName)) {
 		// create message for log
-		swprintf(szMsg, L"DeleteFileTransactedA (FileName = \"%ls\", Transaction = \"%p\") = %ls", szFileName, hTransaction, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"DeleteFileTransactedA (FileName = \"%ls\", Transaction = \"%p\") = %ls", szFileName, hTransaction, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -553,15 +555,16 @@ __declspec(dllexport) BOOL WINAPI MyDeleteFileTransactedA (LPCSTR lpFileName, HA
 // hooking function for MoveFileExW
 __declspec(dllexport) BOOL WINAPI MyMoveFileW (LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName)
 {
+	BOOL bResult;
 	WCHAR szMsg[1000];
 
 	// get result of true function
-	BOOL bResult = TrueMoveFileW (lpExistingFileName, lpNewFileName);
+	bResult = TrueMoveFileW (lpExistingFileName, lpNewFileName);
 
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(lpExistingFileName)) {
 		// create message for log
-		swprintf(szMsg, L"MoveFileW (ExistingFileName = \"%ls\", NewFileName = \"%ls\") = %ls", lpExistingFileName, lpNewFileName, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"MoveFileW (ExistingFileName = \"%ls\", NewFileName = \"%ls\") = %ls", lpExistingFileName, lpNewFileName, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -572,15 +575,16 @@ __declspec(dllexport) BOOL WINAPI MyMoveFileW (LPCWSTR lpExistingFileName, LPCWS
 // hooking function for MoveFileExW
 __declspec(dllexport) BOOL WINAPI MyMoveFileExW (LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, DWORD dwFlags)
 {
+	BOOL bResult;
 	WCHAR szMsg[1000];
 
 	// get result of true function
-	BOOL bResult = TrueMoveFileExW (lpExistingFileName, lpNewFileName, dwFlags);
+	bResult = TrueMoveFileExW (lpExistingFileName, lpNewFileName, dwFlags);
 
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(lpExistingFileName)) {
 		// create message for log
-		swprintf(szMsg, L"MoveFileExW (ExistingFileName = \"%ls\", NewFileName = \"%ls\", Flags = %d) = %ls", lpExistingFileName, lpNewFileName, dwFlags, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"MoveFileExW (ExistingFileName = \"%ls\", NewFileName = \"%ls\", Flags = %d) = %ls", lpExistingFileName, lpNewFileName, dwFlags, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -600,7 +604,7 @@ __declspec(dllexport) BOOL WINAPI MyWriteFile (HANDLE hFile, LPCVOID lpBuffer, D
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, szPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy (szPath, L"unknown");
+		wcscpy_s (szPath, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
@@ -609,7 +613,7 @@ __declspec(dllexport) BOOL WINAPI MyWriteFile (HANDLE hFile, LPCVOID lpBuffer, D
 		bResult = TrueWriteFile (hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
 
 		// create message for log
-		swprintf(szMsg, L"WriteFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, szPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, 10240, L"WriteFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, szPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 	// check if process trying to access to protected drive
@@ -620,18 +624,18 @@ __declspec(dllexport) BOOL WINAPI MyWriteFile (HANDLE hFile, LPCVOID lpBuffer, D
 		// save bytes
 		if (nNumberOfBytesToWrite<1024) {
 			// create string of hexs
-			wcscpy (szBytes, L"bytes = ");
-			for (int ci = 0; ci < nNumberOfBytesToWrite; ci++) {
-				swprintf(szHex, L"%02x ", (unsigned char *) lpBuffer+ci);
-				wcscat (szBytes, szHex);
+			wcscpy_s (szBytes, L"bytes = ");
+			for (unsigned int ci = 0; ci < nNumberOfBytesToWrite; ci++) {
+				swprintf_s(szHex, L"%02x ", (unsigned char *) lpBuffer+ci);
+				wcscat_s (szBytes, szHex);
 			}
 		}
 		else {
-			wcscpy (szBytes, L"bytes = too long");
+			wcscpy_s (szBytes, L"bytes = too long");
 		}
 
 		// create message for log
-		swprintf(szMsg, L"WriteFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d, NumberOfBytesWritten = %d) = %ls;\r\nbytes = %ls", hFile, szPath, nNumberOfBytesToWrite, *lpNumberOfBytesWritten, bResult ? L"TRUE" : L"FALSE", szBytes);
+		swprintf_s(szMsg, 10240, L"WriteFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d, NumberOfBytesWritten = %d) = %ls;\r\nbytes = %ls", hFile, szPath, nNumberOfBytesToWrite, *lpNumberOfBytesWritten, bResult ? L"TRUE" : L"FALSE", szBytes);
 		logMessage(szMsg);
 	}
 	else {
@@ -655,7 +659,7 @@ __declspec(dllexport) BOOL WINAPI MyWriteFileEx (HANDLE hFile, LPCVOID lpBuffer,
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, szPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy (szPath, L"unknown");
+		wcscpy_s (szPath, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
@@ -664,7 +668,7 @@ __declspec(dllexport) BOOL WINAPI MyWriteFileEx (HANDLE hFile, LPCVOID lpBuffer,
 		bResult = TrueWriteFileEx (hFile, lpBuffer, nNumberOfBytesToWrite, lpOverlapped, lpCompletionRoutine);
 
 		// create message for log
-		swprintf(szMsg, L"WriteFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, szPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, 10240, L"WriteFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, szPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 	// check if process trying to access to protected drive
@@ -675,18 +679,18 @@ __declspec(dllexport) BOOL WINAPI MyWriteFileEx (HANDLE hFile, LPCVOID lpBuffer,
 		// save bytes
 		if (nNumberOfBytesToWrite<1024) {
 			// create string of hexs
-			wcscpy (szBytes, L"bytes = ");
-			for (int ci = 0; ci < nNumberOfBytesToWrite; ci++) {
-				swprintf(szHex, L"%02x ", (unsigned char *) lpBuffer+ci);
-				wcscat (szBytes, szHex);
+			wcscpy_s (szBytes, L"bytes = ");
+			for (unsigned int ci = 0; ci < nNumberOfBytesToWrite; ci++) {
+				swprintf_s(szHex, L"%02x ", (unsigned char *) lpBuffer+ci);
+				wcscat_s (szBytes, szHex);
 			}
 		}
 		else {
-			wcscpy (szBytes, L"bytes = too long");
+			wcscpy_s (szBytes, L"bytes = too long");
 		}
 
 		// create message for log
-		swprintf(szMsg, L"WriteFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, szPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE", szBytes);
+		swprintf_s(szMsg, 10240, L"WriteFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, szPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE", szBytes);
 		logMessage(szMsg);
 	}
 	else {
@@ -708,7 +712,7 @@ __declspec(dllexport) BOOL WINAPI MyReadFile (HANDLE hFile, LPVOID lpBuffer, DWO
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, szPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy (szPath, L"unknown");
+		wcscpy_s (szPath, L"unknown");
 	}
 
 	// get result of true function
@@ -717,7 +721,7 @@ __declspec(dllexport) BOOL WINAPI MyReadFile (HANDLE hFile, LPVOID lpBuffer, DWO
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(szPath)) {
 		// create message for log
-		swprintf(szMsg, L"ReadFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToRead = %d) = %ls", hFile, szPath, nNumberOfBytesToRead, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"ReadFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToRead = %d) = %ls", hFile, szPath, nNumberOfBytesToRead, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -735,7 +739,7 @@ __declspec(dllexport) BOOL WINAPI MyReadFileEx (HANDLE hFile, LPVOID lpBuffer, D
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, szPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy (szPath, L"unknown");
+		wcscpy_s (szPath, L"unknown");
 	}
 
 	// get result of true function
@@ -744,7 +748,7 @@ __declspec(dllexport) BOOL WINAPI MyReadFileEx (HANDLE hFile, LPVOID lpBuffer, D
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(szPath)) {
 		// create message for log
-		swprintf(szMsg, L"ReadFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToRead = %d) = %ls", hFile, szPath, nNumberOfBytesToRead, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(szMsg, L"ReadFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToRead = %d) = %ls", hFile, szPath, nNumberOfBytesToRead, bResult ? L"TRUE" : L"FALSE");
 		logMessage(szMsg);
 	}
 
@@ -764,13 +768,13 @@ __declspec(dllexport) HANDLE WINAPI MyCreateFileMappingW (HANDLE hFile, LPSECURI
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, szPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy (szPath, L"unknown");
+		wcscpy_s (szPath, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(szPath)) {
 		// create message for log
-		swprintf(szMsg, L"CreateFileMapping (File = \"%p\", FileName = \"%ls\", Protect = %d) = %p", hFile, szPath, flProtect, hResult);
+		swprintf_s(szMsg, L"CreateFileMapping (File = \"%p\", FileName = \"%ls\", Protect = %d) = %p", hFile, szPath, flProtect, hResult);
 		logMessage(szMsg);
 	}
 
@@ -791,14 +795,14 @@ __declspec(dllexport) LPVOID WINAPI MyMapViewOfFile (HANDLE hFileMappingObject, 
 	if (lpResult) {
 		if (!GetMappedFileNameW(GetCurrentProcess(), lpResult, szPath, MAX_PATH)) {
 			// if fails, manually set FileName
-			wcscpy (szPath, L"unknown");
+			wcscpy_s (szPath, L"unknown");
 		}
 	}
 
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(szPath)) {
 		// create message for log
-		swprintf(szMsg, L"MapViewOfFile (FileMappingObject = \"%p\", FileName = \"%ls\", DesiredAccess = %d) = %p", hFileMappingObject, szPath, dwDesiredAccess, lpResult);
+		swprintf_s(szMsg, L"MapViewOfFile (FileMappingObject = \"%p\", FileName = \"%ls\", DesiredAccess = %d) = %p", hFileMappingObject, szPath, dwDesiredAccess, lpResult);
 		logMessage(szMsg);
 	}
 
@@ -819,14 +823,14 @@ __declspec(dllexport) LPVOID WINAPI MyMapViewOfFileEx (HANDLE hFileMappingObject
 	if (lpResult) {
 		if (!GetMappedFileNameW(GetCurrentProcess(), lpResult, szPath, MAX_PATH)) {
 			// if fails, manually set FileName
-			wcscpy (szPath, L"unknown");
+			wcscpy_s (szPath, L"unknown");
 		}
 	}
 
 	// if process trying to access to file with protected extension
 	if (checkFileExtension(szPath)) {
 		// create message for log
-		swprintf(szMsg, L"MapViewOfFileEx (FileMappingObject = \"%p\", FileName = \"%ls\", DesiredAccess = %d) = %p", hFileMappingObject, szPath, dwDesiredAccess, lpResult);
+		swprintf_s(szMsg, L"MapViewOfFileEx (FileMappingObject = \"%p\", FileName = \"%ls\", DesiredAccess = %d) = %p", hFileMappingObject, szPath, dwDesiredAccess, lpResult);
 		logMessage(szMsg);
 	}
 
