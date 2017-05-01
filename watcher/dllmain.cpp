@@ -4,6 +4,38 @@
 #include "dllmain.h" // main header file
 #include "miniz.c"   // mini ZIP-library
 
+// write process info into log file
+void logProcessInfo () {
+	HANDLE hLog = NULL;
+	DWORD dwSize = 0;
+	DWORD dwCount = 0;
+	WCHAR wszLog[1000] = {0};
+	WCHAR wszPath[1000] = {0};
+	WCHAR wszRecord[1000] = {0};
+
+	// generate filename
+	swprintf_s(wszLog, PATH_LOG, GetCurrentProcessId());
+
+	// get path of current process
+	GetModuleFileName(NULL, wszPath, MAX_PATH);
+
+	// generate string
+	swprintf_s(wszRecord, L"%ls (id = %d)\r\n", wszPath, GetCurrentProcessId());
+
+	// open log file
+	hLog = TrueCreateFileW(wszLog, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hLog != INVALID_HANDLE_VALUE) {
+		// write to end of file
+		SetFilePointer(hLog, 0, NULL, FILE_END);
+
+		// write string
+		dwSize = (wcslen(wszRecord)+1)*sizeof(WCHAR);
+		TrueWriteFile(hLog, (BYTE *) wszRecord, dwSize, &dwCount, NULL);
+	}
+	// close log file
+	TrueCloseHandle(hLog);
+}
+
 // write input string wszMsg into log file
 void logMessage (WCHAR* wszMsg) {
 	HANDLE hLog = NULL;
@@ -20,16 +52,13 @@ void logMessage (WCHAR* wszMsg) {
 		// generate time string
 		Time = time(NULL);
 		localtime_s(&stTime, &Time);
-		swprintf_s(wszTime, L"%d.%d.%d %d:%d:%d", stTime.tm_year + 1900, stTime.tm_mon + 1, stTime.tm_mday, stTime.tm_hour, stTime.tm_min, stTime.tm_sec);
+		swprintf_s(wszTime, L"%04d.%02d.%02d %02d:%02d:%02d", stTime.tm_year + 1900, stTime.tm_mon + 1, stTime.tm_mday, stTime.tm_hour, stTime.tm_min, stTime.tm_sec);
 
 		// generate filename
 		swprintf_s(wszLog, PATH_LOG, GetCurrentProcessId());
 
-		// get path of current process
-		GetModuleFileName(NULL, wszPath, MAX_PATH);
-
 		// generate string
-		swprintf_s(wszRecord, L"%ls - %ls (id = %d): %ls\r\n", wszTime, wszPath, GetCurrentProcessId(), wszMsg);
+		swprintf_s(wszRecord, L"%ls : %ls\r\n", wszTime, wszMsg);
 
 		// open log file
 		hLog = TrueCreateFileW(wszLog, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -861,7 +890,7 @@ BOOL WINAPI MyCryptGenKey (HCRYPTPROV hProv, ALG_ID Algid, DWORD dwFlags, HCRYPT
 	bResult = TrueCryptGenKey (hProv, Algid, dwFlags, phKey);
 
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptGenKey (hProv = \"%p\", Algid = \"%u\", dwFlags = \"%d\", phKey = \"%p\") = %ls", hProv, Algid, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptGenKey (hProv = \"%p\", Algid = \"%u\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hProv, Algid, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -878,7 +907,7 @@ BOOL WINAPI MyCryptGenRandom(HCRYPTPROV hProv, DWORD dwLen, BYTE *pbBuffer)
 	bResult = TrueCryptGenRandom (hProv, dwLen, pbBuffer);
 
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptGenRandom (hProv = \"%p\", dwLen = \"%d\", pbBuffer = \"%p\") = %ls", hProv, dwLen, *pbBuffer, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptGenRandom (hProv = \"%p\", dwLen = \"%d\", pbBuffer = \"%p\") = %ls", hProv, dwLen, pbBuffer, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -895,7 +924,7 @@ BOOL WINAPI MyCryptDeriveKey (HCRYPTPROV hProv, ALG_ID Algid, HCRYPTHASH hBaseDa
 	bResult = TrueCryptDeriveKey (hProv, Algid, hBaseData, dwFlags, phKey);
 
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptDeriveKey (hProv = \"%p\", Algid = \"%u\", hBaseData = \"%p\", dwFlags = \"%d\", phKey = \"%p\") = %ls", hProv, Algid, hBaseData, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptDeriveKey (hProv = \"%p\", Algid = \"%u\", hBaseData = \"%p\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hProv, Algid, hBaseData, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -912,7 +941,7 @@ BOOL WINAPI MyCryptDuplicateKey (HCRYPTKEY hKey, DWORD *pdwReserved, DWORD dwFla
 	bResult = TrueCryptDuplicateKey (hKey, pdwReserved, dwFlags, phKey);
 
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptDuplicateKey (hKey = \"%p\", dwFlags = \"%d\", phKey = \"%p\") = %ls", hKey, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptDuplicateKey (hKey = \"%p\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hKey, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -929,7 +958,7 @@ BOOL WINAPI MyCryptExportKey (HCRYPTKEY hKey, HCRYPTKEY hExpKey, DWORD dwBlobTyp
 	bResult = TrueCryptExportKey(hKey, hExpKey, dwBlobType, dwFlags, pbData, pdwDataLen);
 
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptExportKey (hKey = \"%p\", hExpKey = \"%p\", dwBlobType = \"%d\", dwFlags = \"%d\", dwDataLen = \"%d\") = %ls", hKey, hExpKey, dwBlobType, dwFlags, *pdwDataLen, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptExportKey (hKey = \"%p\", hExpKey = \"%p\", dwBlobType = \"%d\", dwFlags = \"%d\", pbData = \"%p\", dwDataLen = \"%d\") = %ls", hKey, hExpKey, dwBlobType, dwFlags, pbData, *pdwDataLen, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -946,7 +975,7 @@ BOOL WINAPI MyCryptImportKey (HCRYPTPROV hProv, BYTE *pbData, DWORD dwDataLen, H
 	bResult = TrueCryptImportKey(hProv, pbData, dwDataLen, hPubKey, dwFlags, phKey);
 
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptImportKey (hProv = \"%p\", dwDataLen = \"%d\", hPubKey = \"%p\", dwFlags = \"%d\", phKey = \"%p\") = %ls", hProv, dwDataLen, hPubKey, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptImportKey (hProv = \"%p\", pbData = \"%p\", dwDataLen = \"%d\", hPubKey = \"%p\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hProv, pbData, dwDataLen, hPubKey, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -981,7 +1010,7 @@ BOOL WINAPI MyCryptEncrypt (HCRYPTKEY hKey, HCRYPTHASH hHash, BOOL Final, DWORD 
 
 	// create message for log
 	if (Final) {
-		swprintf_s(wszMsg, 1000, L"CryptEncrypt (hKey = \"%p\", hHash = \"%p\", dwFlags = \"%d\", dwDataLen = \"%d\", dwBufLen = \"%d\") = %ls", hKey, hHash, dwFlags, *pdwDataLen, dwBufLen, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(wszMsg, 1000, L"CryptEncrypt (hKey = \"%p\", hHash = \"%p\", dwFlags = \"%d\", pbData = \"%p\", dwDataLen = \"%d\", dwBufLen = \"%d\") = %ls", hKey, hHash, dwFlags, pbData, *pdwDataLen, dwBufLen, bResult ? L"TRUE" : L"FALSE");
 		logMessage(wszMsg);
 	}
 
@@ -1000,7 +1029,7 @@ BOOL WINAPI MyCryptDecrypt (HCRYPTKEY hKey, HCRYPTHASH hHash, BOOL Final, DWORD 
 
 	// create message for log
 	if (Final) {
-		swprintf_s(wszMsg, 1000, L"CryptDecrypt (hKey = \"%p\", hHash = \"%p\", dwFlags = \"%d\", dwDataLen = \"%d\") = %ls", hKey, hHash, dwFlags, *pdwDataLen, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(wszMsg, 1000, L"CryptDecrypt (hKey = \"%p\", hHash = \"%p\", dwFlags = \"%d\", pbData = \"%p\", dwDataLen = \"%d\") = %ls", hKey, hHash, dwFlags, pbData, *pdwDataLen, bResult ? L"TRUE" : L"FALSE");
 		logMessage(wszMsg);
 	}
 
@@ -1018,7 +1047,7 @@ BOOL WINAPI MyCryptCreateHash (HCRYPTPROV hProv, ALG_ID Algid, HCRYPTKEY hKey, D
 	bResult = TrueCryptCreateHash(hProv, Algid, hKey, dwFlags, phHash);
 
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptCreateHash (hProv = \"%p\", Algid = \"%u\", hKey = \"%p\", dwFlags = \"%d\", phHash = \"%p\") = %ls", hProv, Algid, hKey, dwFlags, *phHash, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptCreateHash (hProv = \"%p\", Algid = \"%u\", hKey = \"%p\", dwFlags = \"%d\", hHash = \"%p\") = %ls", hProv, Algid, hKey, dwFlags, *phHash, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -1035,7 +1064,7 @@ BOOL WINAPI MyCryptHashData (HCRYPTHASH hHash, BYTE *pbData, DWORD dwDataLen, DW
 	bResult = TrueCryptHashData(hHash, pbData, dwDataLen, dwFlags);
 
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptHashData (hHash = \"%p\", dwDataLen = \"%d\", dwFlags = \"%d\") = %ls", hHash, dwDataLen, dwFlags, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptHashData (hHash = \"%p\", pbData = \"%p\", dwDataLen = \"%d\", dwFlags = \"%d\") = %ls", hHash, pbData, dwDataLen, dwFlags, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -1065,6 +1094,9 @@ BOOL WINAPI DllMain (HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
 	// if dll is loaded
 	if (dwReason == DLL_PROCESS_ATTACH) 
 	{
+		// write init data
+		logProcessInfo();
+
 		// attach
 		DetourRestoreAfterWith();
 		DetourTransactionBegin();
