@@ -25,7 +25,7 @@ void logMessage (WCHAR* wszMsg) {
 		// generate filename
 		swprintf_s(wszLog, PATH_LOG, GetCurrentProcessId());
 
-		// get path of current process and set ransomware flag
+		// get path of current process
 		GetModuleFileName(NULL, wszPath, MAX_PATH);
 
 		// generate string
@@ -51,10 +51,10 @@ BOOL checkFileExtension (LPCWSTR lpFileName) {
 	WCHAR awszProtected[13][6] = {L".docx", L".doc", L".pptx", L".ppt", L".xslx", L".xsl", L".pdf", L".rtf", L".jpg", L".jpeg", L".png", L".zip", L".rar"};
 	
 	// is length of filename greater than zero
-	if (wcslen (lpFileName) > 0) {
+	if (wcslen(lpFileName) > 0) {
 		// run on list of protected extensions
 		for (DWORD i = 0; i < 13; i++) {
-			if (wcsstr (lpFileName, &awszProtected[i][0])) {
+			if (wcsstr(lpFileName, &awszProtected[i][0])) {
 				return TRUE; // if extension found at list, then return TRUE
 			}
 		}
@@ -395,7 +395,7 @@ __declspec(dllexport) HANDLE WINAPI MyCreateFileW (LPCWSTR lpFileName, DWORD dwD
 			swprintf_s(wszInfo, L"FileSize = %d, Signature = %02x %02x %02x %02x, Entropy = %fl", dwFileSize, abSignature[0], abSignature[1], abSignature[2], abSignature[3], dblEntropy);
 		}
 		else {
-			swprintf_s(wszInfo, L"FileSize = File not exist");
+			swprintf_s(wszInfo, L"File not exist");
 		}
 
 		// check integrity of file
@@ -444,7 +444,7 @@ __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hObject, wszPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s (wszPath, L"unknown");
+		wcscpy_s(wszPath, L"unknown");
 	}
 
 	// get result of true function
@@ -614,7 +614,7 @@ __declspec(dllexport) BOOL WINAPI MyWriteFile (HANDLE hFile, LPCVOID lpBuffer, D
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s (wszPath, L"unknown");
+		wcscpy_s(wszPath, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
@@ -634,14 +634,14 @@ __declspec(dllexport) BOOL WINAPI MyWriteFile (HANDLE hFile, LPCVOID lpBuffer, D
 		// save bytes
 		if (nNumberOfBytesToWrite<1024) {
 			// create string of hexs
-			wcscpy_s (wszBytes, L"bytes = ");
+			wcscpy_s(wszBytes, L"bytes = ");
 			for (unsigned int ci = 0; ci < nNumberOfBytesToWrite; ci++) {
 				swprintf_s(wszHex, L"%02x ", (unsigned char *) lpBuffer+ci);
-				wcscat_s (wszBytes, wszHex);
+				wcscat_s(wszBytes, wszHex);
 			}
 		}
 		else {
-			wcscpy_s (wszBytes, L"bytes = too long");
+			wcscpy_s(wszBytes, L"bytes = too long");
 		}
 
 		// create message for log
@@ -669,7 +669,7 @@ __declspec(dllexport) BOOL WINAPI MyWriteFileEx (HANDLE hFile, LPCVOID lpBuffer,
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s (wszPath, L"unknown");
+		wcscpy_s(wszPath, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
@@ -689,14 +689,14 @@ __declspec(dllexport) BOOL WINAPI MyWriteFileEx (HANDLE hFile, LPCVOID lpBuffer,
 		// save bytes
 		if (nNumberOfBytesToWrite<1024) {
 			// create string of hexs
-			wcscpy_s (wszBytes, L"bytes = ");
+			wcscpy_s(wszBytes, L"bytes = ");
 			for (unsigned int ci = 0; ci < nNumberOfBytesToWrite; ci++) {
 				swprintf_s(wszHex, L"%02x ", (unsigned char *) lpBuffer+ci);
-				wcscat_s (wszBytes, wszHex);
+				wcscat_s(wszBytes, wszHex);
 			}
 		}
 		else {
-			wcscpy_s (wszBytes, L"bytes = too long");
+			wcscpy_s(wszBytes, L"bytes = too long");
 		}
 
 		// create message for log
@@ -722,7 +722,7 @@ __declspec(dllexport) BOOL WINAPI MyReadFile (HANDLE hFile, LPVOID lpBuffer, DWO
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s (wszPath, L"unknown");
+		wcscpy_s(wszPath, L"unknown");
 	}
 
 	// get result of true function
@@ -749,7 +749,7 @@ __declspec(dllexport) BOOL WINAPI MyReadFileEx (HANDLE hFile, LPVOID lpBuffer, D
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s (wszPath, L"unknown");
+		wcscpy_s(wszPath, L"unknown");
 	}
 
 	// get result of true function
@@ -779,7 +779,7 @@ __declspec(dllexport) HANDLE WINAPI MyCreateFileMappingW (HANDLE hFile, LPSECURI
 	// get filename by handle
 	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s (wszPath, L"unknown");
+		wcscpy_s(wszPath, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
@@ -807,7 +807,7 @@ __declspec(dllexport) LPVOID WINAPI MyMapViewOfFile (HANDLE hFileMappingObject, 
 	if (lpResult) {
 		if (!GetMappedFileNameW(GetCurrentProcess(), lpResult, wszPath, MAX_PATH)) {
 			// if fails, manually set FileName
-			wcscpy_s (wszPath, L"unknown");
+			wcscpy_s(wszPath, L"unknown");
 		}
 	}
 
@@ -836,7 +836,7 @@ __declspec(dllexport) LPVOID WINAPI MyMapViewOfFileEx (HANDLE hFileMappingObject
 	if (lpResult) {
 		if (!GetMappedFileNameW(GetCurrentProcess(), lpResult, wszPath, MAX_PATH)) {
 			// if fails, manually set FileName
-			wcscpy_s (wszPath, L"unknown");
+			wcscpy_s(wszPath, L"unknown");
 		}
 	}
 
