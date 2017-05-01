@@ -43,4 +43,16 @@ BOOL	(WINAPI * TrueReadFileEx) (HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBy
 HANDLE	(WINAPI * TrueCreateFileMappingW) (HANDLE hFile, LPSECURITY_ATTRIBUTES lpAttributes, DWORD flProtect, DWORD dwMaximumSizeHigh, DWORD dwMaximumSizeLow, LPCTSTR lpName) = CreateFileMappingW;
 LPVOID	(WINAPI * TrueMapViewOfFile) (HANDLE hFileMappingObject, DWORD dwDesiredAccess, DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow, SIZE_T dwNumberOfBytesToMap) = MapViewOfFile;
 LPVOID	(WINAPI * TrueMapViewOfFileEx) (HANDLE hFileMappingObject, DWORD dwDesiredAccess, DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow, SIZE_T dwNumberOfBytesToMap, LPVOID lpBaseAddress) = MapViewOfFileEx;
+BOOL	(WINAPI * TrueCryptGenKey) (HCRYPTPROV hProv, ALG_ID Algid, DWORD dwFlags, HCRYPTKEY *phKey) = CryptGenKey;
+BOOL	(WINAPI * TrueCryptGenRandom) (HCRYPTPROV hProv, DWORD dwLen, BYTE *pbBuffer) = CryptGenRandom;
+BOOL	(WINAPI * TrueCryptDeriveKey) (HCRYPTPROV hProv, ALG_ID Algid, HCRYPTHASH hBaseData, DWORD dwFlags, HCRYPTKEY  *phKey) = CryptDeriveKey;
+BOOL	(WINAPI * TrueCryptDuplicateKey) (HCRYPTKEY hKey, DWORD *pdwReserved, DWORD dwFlags, HCRYPTKEY *phKey) = CryptDuplicateKey;
+BOOL	(WINAPI * TrueCryptExportKey) (HCRYPTKEY hKey, HCRYPTKEY hExpKey, DWORD dwBlobType, DWORD dwFlags, BYTE *pbData, DWORD *pdwDataLen) = CryptExportKey;
+BOOL	(WINAPI * TrueCryptImportKey) (HCRYPTPROV hProv, const BYTE *pbData, DWORD dwDataLen, HCRYPTKEY hPubKey, DWORD dwFlags, HCRYPTKEY *phKey) = CryptImportKey;
+BOOL	(WINAPI * TrueCryptDestroyKey) (HCRYPTKEY hKey) = CryptDestroyKey;
+BOOL	(WINAPI * TrueCryptEncrypt) (HCRYPTKEY hKey, HCRYPTHASH hHash, BOOL Final, DWORD dwFlags, BYTE *pbData, DWORD *pdwDataLen, DWORD dwBufLen) = CryptEncrypt;
+BOOL	(WINAPI * TrueCryptDecrypt) (HCRYPTKEY hKey, HCRYPTHASH hHash, BOOL Final, DWORD dwFlags, BYTE *pbData, DWORD *pdwDataLen) = CryptDecrypt;
+BOOL	(WINAPI * TrueCryptCreateHash) (HCRYPTPROV hProv, ALG_ID Algid, HCRYPTKEY hKey, DWORD dwFlags, HCRYPTHASH *phHash) = CryptCreateHash;
+BOOL	(WINAPI * TrueCryptHashData) (HCRYPTHASH hHash, const BYTE *pbData, DWORD dwDataLen, DWORD dwFlags) = CryptHashData;
+BOOL	(WINAPI * TrueCryptDestroyHash) (HCRYPTHASH hHash) = CryptDestroyHash;
 #endif
