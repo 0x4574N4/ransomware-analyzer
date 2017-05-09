@@ -20,6 +20,7 @@
 #define MAX_FILESIZE_INTEGRITY 1024000 // max size of file for integrity checking
 #define BUFFER 1024 // size of buffer to read
 #define PATH_LOG L"C:\\Windows\\ransomware_analyzer\\log\\log_%d.dll"
+#define PATH_DUMP L"C:\\Windows\\ransomware_analyzer\\dump\\dump_%d_%d.dll"
 #define MINIZ_HEADER_FILE_ONLY
 
 typedef unsigned char uint8;
