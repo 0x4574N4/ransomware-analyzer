@@ -9,21 +9,21 @@ void logProcessInfo () {
 	HANDLE hLog = NULL;
 	DWORD dwSize = 0;
 	DWORD dwCount = 0;
-	WCHAR wszLog[1000] = {0};
-	WCHAR wszPath[1000] = {0};
+	WCHAR wszProcessPath[MAX_PATH+1] = {0};
+	WCHAR wszLogPath[MAX_PATH+1] = {0};
 	WCHAR wszRecord[1000] = {0};
 
 	// generate filename
-	swprintf_s(wszLog, PATH_LOG, GetCurrentProcessId());
+	swprintf_s(wszLogPath, PATH_LOG, GetCurrentProcessId());
 
 	// get path of current process
-	GetModuleFileName(NULL, wszPath, MAX_PATH);
+	GetModuleFileName(NULL, wszProcessPath, MAX_PATH);
 
 	// generate string
-	swprintf_s(wszRecord, L"%ls (id = %d)\r\n", wszPath, GetCurrentProcessId());
+	swprintf_s(wszRecord, L"%ls (id = %d)\r\n", wszProcessPath, GetCurrentProcessId());
 
 	// open log file
-	hLog = TrueCreateFileW(wszLog, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	hLog = TrueCreateFileW(wszLogPath, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hLog != INVALID_HANDLE_VALUE) {
 		// write to end of file
 		SetFilePointer(hLog, 0, NULL, FILE_END);
@@ -41,10 +41,9 @@ void logMessage (WCHAR* wszMsg) {
 	HANDLE hLog = NULL;
 	DWORD dwSize = 0;
 	DWORD dwCount = 0;
-	WCHAR wszTime[100] = {0};
-	WCHAR wszLog[1000] = {0};
-	WCHAR wszPath[1000] = {0};
+	WCHAR wszLogPath[MAX_PATH+1] = {0};
 	WCHAR wszRecord[1000] = {0};
+	WCHAR wszTime[100] = {0};
 	struct tm stTime;
 	time_t Time;
 
@@ -55,13 +54,13 @@ void logMessage (WCHAR* wszMsg) {
 		swprintf_s(wszTime, L"%04d.%02d.%02d %02d:%02d:%02d", stTime.tm_year + 1900, stTime.tm_mon + 1, stTime.tm_mday, stTime.tm_hour, stTime.tm_min, stTime.tm_sec);
 
 		// generate filename
-		swprintf_s(wszLog, PATH_LOG, GetCurrentProcessId());
+		swprintf_s(wszLogPath, PATH_LOG, GetCurrentProcessId());
 
 		// generate string
 		swprintf_s(wszRecord, L"%ls : %ls\r\n", wszTime, wszMsg);
 
 		// open log file
-		hLog = TrueCreateFileW(wszLog, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		hLog = TrueCreateFileW(wszLogPath, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 		if (hLog != INVALID_HANDLE_VALUE) {
 			// write to end of file
 			SetFilePointer(hLog, 0, NULL, FILE_END);
@@ -71,6 +70,43 @@ void logMessage (WCHAR* wszMsg) {
 			TrueWriteFile(hLog, (BYTE *) wszRecord, dwSize, &dwCount, NULL);
 		}		
 		TrueCloseHandle(hLog); // close log file
+	}
+}
+
+// write input string wszMsg into log file
+BOOL dumpBytes (BYTE* pbBytes, DWORD dwSize, DWORD* dwRandom) {
+	HANDLE hDump = NULL;
+	DWORD dwCount = 0;
+	WCHAR wszDumpPath[MAX_PATH+1] = {0};
+
+	if (pbBytes != NULL) {
+		// generate random value
+		*dwRandom = GetTickCount();
+
+		// generate filename
+		swprintf_s(wszDumpPath, PATH_DUMP, GetCurrentProcessId(), *dwRandom);
+
+		// open log file
+		hDump = TrueCreateFileW(wszDumpPath, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		if (hDump != INVALID_HANDLE_VALUE) {
+			// write to begin of file
+			SetFilePointer(hDump, 0, NULL, FILE_BEGIN);
+
+			// write string
+			TrueWriteFile(hDump, pbBytes, dwSize, &dwCount, NULL);
+		}		
+		TrueCloseHandle(hDump); // close log file
+
+		// check state
+		if (dwSize == dwCount) {
+			return TRUE;
+		}
+		else {
+			return FALSE;
+		}
+	}
+	else {
+		return FALSE;
 	}
 }
 
@@ -461,7 +497,7 @@ __declspec(dllexport) HANDLE WINAPI MyCreateFileW (LPCWSTR lpFileName, DWORD dwD
 __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 {
 	BOOL bResult;
-	WCHAR wszPath[MAX_PATH+1];
+	WCHAR wszFileName[MAX_PATH+1];
 	WCHAR wszMsg[1000];
 	WCHAR wszInfo[100] = {0};
 	WCHAR wszIntegrity[100] = {0};
@@ -471,18 +507,18 @@ __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 	double dblEntropy = 0;
 
 	// get filename by handle
-	if (!GetFinalPathNameByHandleW(hObject, wszPath, MAX_PATH, 0)) {
+	if (!GetFinalPathNameByHandleW(hObject, wszFileName, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s(wszPath, L"unknown");
+		wcscpy_s(wszFileName, L"unknown");
 	}
 
 	// get result of true function
 	bResult = TrueCloseHandle(hObject);
 
 	// if process trying to access to file with protected extension or to protected drive
-	if (checkFileExtension(wszPath)) {
+	if (checkFileExtension(wszFileName)) {
 		// get main file info
-		if (getFileInfo(wszPath, &dwFileSize, abSignature, &dblEntropy)) {
+		if (getFileInfo(wszFileName, &dwFileSize, abSignature, &dblEntropy)) {
 			swprintf_s(wszInfo, L"FileSize = %d, Signature = %02x %02x %02x %02x, Entropy = %fl", dwFileSize, abSignature[0], abSignature[1], abSignature[2], abSignature[3], dblEntropy);
 		}
 		else {
@@ -490,12 +526,12 @@ __declspec(dllexport) BOOL WINAPI MyCloseHandle (HANDLE hObject)
 		}
 
 		// check integrity of file
-		if (checkZipFileExtension(wszPath)) {
-			swprintf_s(wszIntegrity, L", Integrity = %ls", checkZipIntegrity(wszPath) ? L"TRUE" : L"FALSE");
+		if (checkZipFileExtension(wszFileName)) {
+			swprintf_s(wszIntegrity, L", Integrity = %ls", checkZipIntegrity(wszFileName) ? L"TRUE" : L"FALSE");
 		}
 
 		// create message for log
-		swprintf_s(wszMsg, L"CloseHandle (Object = \"%p\", FileName = \"%ls\") = %ls; %ls%ls", hObject, wszPath, bResult ? L"TRUE" : L"FALSE", wszInfo, wszIntegrity);
+		swprintf_s(wszMsg, L"CloseHandle (Object = \"%p\", FileName = \"%ls\") = %ls; %ls%ls", hObject, wszFileName, bResult ? L"TRUE" : L"FALSE", wszInfo, wszIntegrity);
 		logMessage(wszMsg);
 	}
 
@@ -635,46 +671,48 @@ __declspec(dllexport) BOOL WINAPI MyMoveFileExW (LPCWSTR lpExistingFileName, LPC
 __declspec(dllexport) BOOL WINAPI MyWriteFile (HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped)
 {
 	BOOL bResult;
-	WCHAR wszPath[MAX_PATH+1];
-	WCHAR wszBytes[10240];
+	WCHAR wszDumpPath[MAX_PATH+1];
+	WCHAR wszFileName[MAX_PATH+1];
 	WCHAR wszMsg[1000];
-	WCHAR wszHex[10];
+	DWORD dwRandom;
 
 	// get filename by handle
-	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
+	if (!GetFinalPathNameByHandleW(hFile, wszFileName, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s(wszPath, L"unknown");
+		wcscpy_s(wszFileName, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
-	if (checkFileExtension(wszPath)) {
+	if (checkFileExtension(wszFileName)) {
 		// get result of true function
 		bResult = TrueWriteFile (hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
 
 		// create message for log
-		swprintf_s(wszMsg, 10240, L"WriteFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, wszPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(wszMsg, 10240, L"WriteFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, wszFileName, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE");
 		logMessage(wszMsg);
 	}
 	// check if process trying to access to protected drive
-	else if (checkDrive(wszPath)) {
+	else if (checkDrive(wszFileName)) {
 		// set false result
 		bResult = FALSE;
 
-		// save bytes
-		if (nNumberOfBytesToWrite<1024) {
-			// create string of hexs
-			wcscpy_s(wszBytes, L"bytes = ");
-			for (unsigned int ci = 0; ci < nNumberOfBytesToWrite; ci++) {
-				swprintf_s(wszHex, L"%02x ", (unsigned char *) lpBuffer+ci);
-				wcscat_s(wszBytes, wszHex);
+		// store bytes
+		if (nNumberOfBytesToWrite<10240) {
+			// dump bytes into file
+			if (dumpBytes((BYTE *) lpBuffer, nNumberOfBytesToWrite, &dwRandom)) {
+				// create string of dump file
+				swprintf_s(wszDumpPath, PATH_DUMP, GetCurrentProcessId(), dwRandom);
+			}
+			else {
+				wcscpy_s(wszDumpPath, L"error while file dumping");
 			}
 		}
 		else {
-			wcscpy_s(wszBytes, L"bytes = too long");
+			wcscpy_s(wszDumpPath, L"invalid data");
 		}
 
 		// create message for log
-		swprintf_s(wszMsg, 10240, L"WriteFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d, NumberOfBytesWritten = %d) = %ls;\r\nbytes = %ls", hFile, wszPath, nNumberOfBytesToWrite, *lpNumberOfBytesWritten, bResult ? L"TRUE" : L"FALSE", wszBytes);
+		swprintf_s(wszMsg, 10240, L"WriteFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls; file = %ls", hFile, wszFileName, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE", wszDumpPath);
 		logMessage(wszMsg);
 	}
 	else {
@@ -690,46 +728,48 @@ __declspec(dllexport) BOOL WINAPI MyWriteFile (HANDLE hFile, LPCVOID lpBuffer, D
 __declspec(dllexport) BOOL WINAPI MyWriteFileEx (HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPOVERLAPPED lpOverlapped, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine)
 {
 	BOOL bResult;
-	WCHAR wszPath[MAX_PATH+1];
-	WCHAR wszBytes[10240];
+	WCHAR wszDumpPath[MAX_PATH+1];
+	WCHAR wszFileName[MAX_PATH+1];
 	WCHAR wszMsg[1000];
-	WCHAR wszHex[10];
+	DWORD dwRandom;
 
 	// get filename by handle
-	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
+	if (!GetFinalPathNameByHandleW(hFile, wszFileName, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s(wszPath, L"unknown");
+		wcscpy_s(wszFileName, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
-	if (checkFileExtension(wszPath)) {
+	if (checkFileExtension(wszFileName)) {
 		// get result of true function
 		bResult = TrueWriteFileEx (hFile, lpBuffer, nNumberOfBytesToWrite, lpOverlapped, lpCompletionRoutine);
 
 		// create message for log
-		swprintf_s(wszMsg, 10240, L"WriteFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, wszPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(wszMsg, 10240, L"WriteFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, wszFileName, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE");
 		logMessage(wszMsg);
 	}
 	// check if process trying to access to protected drive
-	else if (checkDrive(wszPath)) {
+	else if (checkDrive(wszFileName)) {
 		// set false result
 		bResult = FALSE;
 
-		// save bytes
-		if (nNumberOfBytesToWrite<1024) {
-			// create string of hexs
-			wcscpy_s(wszBytes, L"bytes = ");
-			for (unsigned int ci = 0; ci < nNumberOfBytesToWrite; ci++) {
-				swprintf_s(wszHex, L"%02x ", (unsigned char *) lpBuffer+ci);
-				wcscat_s(wszBytes, wszHex);
+		// store bytes
+		if (nNumberOfBytesToWrite<10240) {
+			// dump bytes into file
+			if (dumpBytes((BYTE *) lpBuffer, nNumberOfBytesToWrite, &dwRandom)) {
+				// create string of dump file
+				swprintf_s(wszDumpPath, PATH_DUMP, GetCurrentProcessId(), dwRandom);
+			}
+			else {
+				wcscpy_s(wszDumpPath, L"error while file dumping");
 			}
 		}
 		else {
-			wcscpy_s(wszBytes, L"bytes = too long");
+			wcscpy_s(wszDumpPath, L"invalid data");
 		}
 
 		// create message for log
-		swprintf_s(wszMsg, 10240, L"WriteFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls", hFile, wszPath, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE", wszBytes);
+		swprintf_s(wszMsg, 10240, L"WriteFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToWrite = %d) = %ls; file = %ls", hFile, wszFileName, nNumberOfBytesToWrite, bResult ? L"TRUE" : L"FALSE", wszDumpPath);
 		logMessage(wszMsg);
 	}
 	else {
@@ -745,22 +785,22 @@ __declspec(dllexport) BOOL WINAPI MyWriteFileEx (HANDLE hFile, LPCVOID lpBuffer,
 __declspec(dllexport) BOOL WINAPI MyReadFile (HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped)
 {
 	BOOL bResult;
-	WCHAR wszPath[MAX_PATH+1];
+	WCHAR wszFileName[MAX_PATH+1];
 	WCHAR wszMsg[1000];
 
 	// get filename by handle
-	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
+	if (!GetFinalPathNameByHandleW(hFile, wszFileName, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s(wszPath, L"unknown");
+		wcscpy_s(wszFileName, L"unknown");
 	}
 
 	// get result of true function
 	bResult = TrueReadFile (hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
 
 	// if process trying to access to file with protected extension
-	if (checkFileExtension(wszPath)) {
+	if (checkFileExtension(wszFileName)) {
 		// create message for log
-		swprintf_s(wszMsg, L"ReadFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToRead = %d) = %ls", hFile, wszPath, nNumberOfBytesToRead, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(wszMsg, L"ReadFile (File = \"%p\", FileName = \"%ls\", NumberOfBytesToRead = %d) = %ls", hFile, wszFileName, nNumberOfBytesToRead, bResult ? L"TRUE" : L"FALSE");
 		logMessage(wszMsg);
 	}
 
@@ -772,22 +812,22 @@ __declspec(dllexport) BOOL WINAPI MyReadFile (HANDLE hFile, LPVOID lpBuffer, DWO
 __declspec(dllexport) BOOL WINAPI MyReadFileEx (HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPOVERLAPPED lpOverlapped, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine)
 {
 	BOOL bResult;
-	WCHAR wszPath[MAX_PATH+1];
+	WCHAR wszFileName[MAX_PATH+1];
 	WCHAR wszMsg[1000];
 
 	// get filename by handle
-	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
+	if (!GetFinalPathNameByHandleW(hFile, wszFileName, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s(wszPath, L"unknown");
+		wcscpy_s(wszFileName, L"unknown");
 	}
 
 	// get result of true function
 	bResult = TrueReadFileEx (hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped, lpCompletionRoutine);
 
 	// if process trying to access to file with protected extension
-	if (checkFileExtension(wszPath)) {
+	if (checkFileExtension(wszFileName)) {
 		// create message for log
-		swprintf_s(wszMsg, L"ReadFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToRead = %d) = %ls", hFile, wszPath, nNumberOfBytesToRead, bResult ? L"TRUE" : L"FALSE");
+		swprintf_s(wszMsg, L"ReadFileEx (File = \"%p\", FileName = \"%ls\", NumberOfBytesToRead = %d) = %ls", hFile, wszFileName, nNumberOfBytesToRead, bResult ? L"TRUE" : L"FALSE");
 		logMessage(wszMsg);
 	}
 
@@ -799,22 +839,22 @@ __declspec(dllexport) BOOL WINAPI MyReadFileEx (HANDLE hFile, LPVOID lpBuffer, D
 __declspec(dllexport) HANDLE WINAPI MyCreateFileMappingW (HANDLE hFile, LPSECURITY_ATTRIBUTES lpAttributes, DWORD flProtect, DWORD dwMaximumSizeHigh, DWORD dwMaximumSizeLow, LPCTSTR lpName)
 {
 	HANDLE hResult;
-	WCHAR wszPath[MAX_PATH+1];
+	WCHAR wszFileName[MAX_PATH+1];
 	WCHAR wszMsg[1000];
 
 	// get result of true function
 	hResult = TrueCreateFileMappingW (hFile, lpAttributes, flProtect, dwMaximumSizeHigh, dwMaximumSizeLow, lpName);
 
 	// get filename by handle
-	if (!GetFinalPathNameByHandleW(hFile, wszPath, MAX_PATH, 0)) {
+	if (!GetFinalPathNameByHandleW(hFile, wszFileName, MAX_PATH, 0)) {
 		// if fails, manually set FileName
-		wcscpy_s(wszPath, L"unknown");
+		wcscpy_s(wszFileName, L"unknown");
 	}
 
 	// if process trying to access to file with protected extension
-	if (checkFileExtension(wszPath)) {
+	if (checkFileExtension(wszFileName)) {
 		// create message for log
-		swprintf_s(wszMsg, L"CreateFileMapping (File = \"%p\", FileName = \"%ls\", Protect = %d) = %p", hFile, wszPath, flProtect, hResult);
+		swprintf_s(wszMsg, L"CreateFileMapping (File = \"%p\", FileName = \"%ls\", Protect = %d) = %p", hFile, wszFileName, flProtect, hResult);
 		logMessage(wszMsg);
 	}
 
@@ -826,7 +866,7 @@ __declspec(dllexport) HANDLE WINAPI MyCreateFileMappingW (HANDLE hFile, LPSECURI
 __declspec(dllexport) LPVOID WINAPI MyMapViewOfFile (HANDLE hFileMappingObject, DWORD dwDesiredAccess, DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow, SIZE_T dwNumberOfBytesToMap)
 {
 	LPVOID lpResult;
-	WCHAR wszPath[MAX_PATH+1];
+	WCHAR wszFileName[MAX_PATH+1];
 	WCHAR wszMsg[1000];
 
 	// get result of true function
@@ -834,16 +874,16 @@ __declspec(dllexport) LPVOID WINAPI MyMapViewOfFile (HANDLE hFileMappingObject, 
 
 	// get filename by handle
 	if (lpResult) {
-		if (!GetMappedFileNameW(GetCurrentProcess(), lpResult, wszPath, MAX_PATH)) {
+		if (!GetMappedFileNameW(GetCurrentProcess(), lpResult, wszFileName, MAX_PATH)) {
 			// if fails, manually set FileName
-			wcscpy_s(wszPath, L"unknown");
+			wcscpy_s(wszFileName, L"unknown");
 		}
 	}
 
 	// if process trying to access to file with protected extension
-	if (checkFileExtension(wszPath)) {
+	if (checkFileExtension(wszFileName)) {
 		// create message for log
-		swprintf_s(wszMsg, L"MapViewOfFile (FileMappingObject = \"%p\", FileName = \"%ls\", DesiredAccess = %08x) = %p", hFileMappingObject, wszPath, dwDesiredAccess, lpResult);
+		swprintf_s(wszMsg, L"MapViewOfFile (FileMappingObject = \"%p\", FileName = \"%ls\", DesiredAccess = %08x) = %p", hFileMappingObject, wszFileName, dwDesiredAccess, lpResult);
 		logMessage(wszMsg);
 	}
 
@@ -855,7 +895,7 @@ __declspec(dllexport) LPVOID WINAPI MyMapViewOfFile (HANDLE hFileMappingObject, 
 __declspec(dllexport) LPVOID WINAPI MyMapViewOfFileEx (HANDLE hFileMappingObject, DWORD dwDesiredAccess, DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow, SIZE_T dwNumberOfBytesToMap, LPVOID lpBaseAddress)
 {
 	LPVOID lpResult;
-	WCHAR wszPath[MAX_PATH+1];
+	WCHAR wszFileName[MAX_PATH+1];
 	WCHAR wszMsg[1000];
 
 	// get result of true function
@@ -863,16 +903,16 @@ __declspec(dllexport) LPVOID WINAPI MyMapViewOfFileEx (HANDLE hFileMappingObject
 
 	// get filename by handle
 	if (lpResult) {
-		if (!GetMappedFileNameW(GetCurrentProcess(), lpResult, wszPath, MAX_PATH)) {
+		if (!GetMappedFileNameW(GetCurrentProcess(), lpResult, wszFileName, MAX_PATH)) {
 			// if fails, manually set FileName
-			wcscpy_s(wszPath, L"unknown");
+			wcscpy_s(wszFileName, L"unknown");
 		}
 	}
 
 	// if process trying to access to file with protected extension
-	if (checkFileExtension(wszPath)) {
+	if (checkFileExtension(wszFileName)) {
 		// create message for log
-		swprintf_s(wszMsg, L"MapViewOfFileEx (FileMappingObject = \"%p\", FileName = \"%ls\", DesiredAccess = %08x) = %p", hFileMappingObject, wszPath, dwDesiredAccess, lpResult);
+		swprintf_s(wszMsg, L"MapViewOfFileEx (FileMappingObject = \"%p\", FileName = \"%ls\", DesiredAccess = %08x) = %p", hFileMappingObject, wszFileName, dwDesiredAccess, lpResult);
 		logMessage(wszMsg);
 	}
 
@@ -889,6 +929,8 @@ BOOL WINAPI MyCryptGenKey (HCRYPTPROV hProv, ALG_ID Algid, DWORD dwFlags, HCRYPT
 	// get result of true function
 	bResult = TrueCryptGenKey (hProv, Algid, dwFlags, phKey);
 
+	// todo: write key bytes
+
 	// create message for log
 	swprintf_s(wszMsg, 1000, L"CryptGenKey (hProv = \"%p\", Algid = \"%u\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hProv, Algid, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
@@ -898,16 +940,33 @@ BOOL WINAPI MyCryptGenKey (HCRYPTPROV hProv, ALG_ID Algid, DWORD dwFlags, HCRYPT
 }
 
 // hooking function for CryptGenRandom
-BOOL WINAPI MyCryptGenRandom(HCRYPTPROV hProv, DWORD dwLen, BYTE *pbBuffer)
+BOOL WINAPI MyCryptGenRandom (HCRYPTPROV hProv, DWORD dwLen, BYTE *pbBuffer)
 {
 	BOOL bResult;
+	WCHAR wszDumpPath[MAX_PATH+1];
 	WCHAR wszMsg[1000];
+	DWORD dwRandom;
 
 	// get result of true function
 	bResult = TrueCryptGenRandom (hProv, dwLen, pbBuffer);
 
+	// store bytes
+	if (dwLen<10240) {
+		// dump bytes into file
+		if (dumpBytes(pbBuffer, dwLen, &dwRandom)) {
+			// create string of dump file
+			swprintf_s(wszDumpPath, PATH_DUMP, GetCurrentProcessId(), dwRandom);
+		}
+		else {
+			wcscpy_s(wszDumpPath, L"error while file dumping");
+		}
+	}
+	else {
+		wcscpy_s(wszDumpPath, L"invalid data");
+	}
+
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptGenRandom (hProv = \"%p\", dwLen = \"%d\", pbBuffer = \"%p\") = %ls", hProv, dwLen, pbBuffer, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptGenRandom (hProv = \"%p\", dwLen = \"%d\", pbBuffer = \"%p\") = %ls; file = %ls", hProv, dwLen, pbBuffer, bResult ? L"TRUE" : L"FALSE", wszDumpPath);
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -922,6 +981,8 @@ BOOL WINAPI MyCryptDeriveKey (HCRYPTPROV hProv, ALG_ID Algid, HCRYPTHASH hBaseDa
 
 	// get result of true function
 	bResult = TrueCryptDeriveKey (hProv, Algid, hBaseData, dwFlags, phKey);
+
+	// todo: dump key bytes
 
 	// create message for log
 	swprintf_s(wszMsg, 1000, L"CryptDeriveKey (hProv = \"%p\", Algid = \"%u\", hBaseData = \"%p\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hProv, Algid, hBaseData, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
@@ -952,13 +1013,30 @@ BOOL WINAPI MyCryptDuplicateKey (HCRYPTKEY hKey, DWORD *pdwReserved, DWORD dwFla
 BOOL WINAPI MyCryptExportKey (HCRYPTKEY hKey, HCRYPTKEY hExpKey, DWORD dwBlobType, DWORD dwFlags, BYTE *pbData, DWORD *pdwDataLen)
 {
 	BOOL bResult;
+	WCHAR wszDumpPath[MAX_PATH+1];
 	WCHAR wszMsg[1000];
+	DWORD dwRandom;
 
 	// get result of true function
 	bResult = TrueCryptExportKey(hKey, hExpKey, dwBlobType, dwFlags, pbData, pdwDataLen);
 
+	// store bytes
+	if ((pbData!=NULL) && (*pdwDataLen>0) && (*pdwDataLen<10240)) {
+		// dump bytes into file
+		if (dumpBytes(pbData, *pdwDataLen, &dwRandom)) {
+			// create string of dump file
+			swprintf_s(wszDumpPath, PATH_DUMP, GetCurrentProcessId(), dwRandom);
+		}
+		else {
+			wcscpy_s(wszDumpPath, L"error while file dumping");
+		}
+	}
+	else {
+		wcscpy_s(wszDumpPath, L"invalid data");
+	}
+
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptExportKey (hKey = \"%p\", hExpKey = \"%p\", dwBlobType = \"%d\", dwFlags = \"%d\", pbData = \"%p\", dwDataLen = \"%d\") = %ls", hKey, hExpKey, dwBlobType, dwFlags, pbData, *pdwDataLen, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptExportKey (hKey = \"%p\", hExpKey = \"%p\", dwBlobType = \"%d\", dwFlags = \"%d\", pbData = \"%p\", dwDataLen = \"%d\") = %ls; file = %ls", hKey, hExpKey, dwBlobType, dwFlags, pbData, *pdwDataLen, bResult ? L"TRUE" : L"FALSE", wszDumpPath);
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -969,13 +1047,30 @@ BOOL WINAPI MyCryptExportKey (HCRYPTKEY hKey, HCRYPTKEY hExpKey, DWORD dwBlobTyp
 BOOL WINAPI MyCryptImportKey (HCRYPTPROV hProv, BYTE *pbData, DWORD dwDataLen, HCRYPTKEY hPubKey, DWORD dwFlags, HCRYPTKEY *phKey)
 {
 	BOOL bResult;
+	WCHAR wszDumpPath[MAX_PATH+1];
 	WCHAR wszMsg[1000];
+	DWORD dwRandom;
 
 	// get result of true function
 	bResult = TrueCryptImportKey(hProv, pbData, dwDataLen, hPubKey, dwFlags, phKey);
 
+	// store bytes
+	if ((pbData!=NULL) && (dwDataLen>0) && (dwDataLen<10240)) {
+		// dump bytes into file
+		if (dumpBytes(pbData, dwDataLen, &dwRandom)) {
+			// create string of dump file
+			swprintf_s(wszDumpPath, PATH_DUMP, GetCurrentProcessId(), dwRandom);
+		}
+		else {
+			wcscpy_s(wszDumpPath, L"error while file dumping");
+		}
+	}
+	else {
+		wcscpy_s(wszDumpPath, L"invalid data");
+	}
+
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptImportKey (hProv = \"%p\", pbData = \"%p\", dwDataLen = \"%d\", hPubKey = \"%p\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hProv, pbData, dwDataLen, hPubKey, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptImportKey (hProv = \"%p\", pbData = \"%p\", dwDataLen = \"%d\", hPubKey = \"%p\", dwFlags = \"%d\", hKey = \"%p\") = %ls; file = %ls", hProv, pbData, dwDataLen, hPubKey, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE", wszDumpPath);
 	logMessage(wszMsg);
 
 	// return result of true function
@@ -1058,13 +1153,30 @@ BOOL WINAPI MyCryptCreateHash (HCRYPTPROV hProv, ALG_ID Algid, HCRYPTKEY hKey, D
 BOOL WINAPI MyCryptHashData (HCRYPTHASH hHash, BYTE *pbData, DWORD dwDataLen, DWORD dwFlags)
 {
 	BOOL bResult;
+	WCHAR wszDumpPath[MAX_PATH+1];
 	WCHAR wszMsg[1000];
+	DWORD dwRandom;
 
 	// get result of true function
 	bResult = TrueCryptHashData(hHash, pbData, dwDataLen, dwFlags);
 
+	// store bytes
+	if ((pbData!=NULL) && (dwDataLen>0) && (dwDataLen<10240)) {
+		// dump bytes into file
+		if (dumpBytes(pbData, dwDataLen, &dwRandom)) {
+			// create string of dump file
+			swprintf_s(wszDumpPath, PATH_DUMP, GetCurrentProcessId(), dwRandom);
+		}
+		else {
+			wcscpy_s(wszDumpPath, L"error while file dumping");
+		}
+	}
+	else {
+		wcscpy_s(wszDumpPath, L"invalid data");
+	}
+
 	// create message for log
-	swprintf_s(wszMsg, 1000, L"CryptHashData (hHash = \"%p\", pbData = \"%p\", dwDataLen = \"%d\", dwFlags = \"%d\") = %ls", hHash, pbData, dwDataLen, dwFlags, bResult ? L"TRUE" : L"FALSE");
+	swprintf_s(wszMsg, 1000, L"CryptHashData (hHash = \"%p\", pbData = \"%p\", dwDataLen = \"%d\", dwFlags = \"%d\") = %ls; file = %ls", hHash, pbData, dwDataLen, dwFlags, bResult ? L"TRUE" : L"FALSE", wszDumpPath);
 	logMessage(wszMsg);
 
 	// return result of true function
