@@ -929,8 +929,6 @@ BOOL WINAPI MyCryptGenKey (HCRYPTPROV hProv, ALG_ID Algid, DWORD dwFlags, HCRYPT
 	// get result of true function
 	bResult = TrueCryptGenKey (hProv, Algid, dwFlags, phKey);
 
-	// todo: write key bytes
-
 	// create message for log
 	swprintf_s(wszMsg, 1000, L"CryptGenKey (hProv = \"%p\", Algid = \"%u\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hProv, Algid, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
 	logMessage(wszMsg);
@@ -981,8 +979,6 @@ BOOL WINAPI MyCryptDeriveKey (HCRYPTPROV hProv, ALG_ID Algid, HCRYPTHASH hBaseDa
 
 	// get result of true function
 	bResult = TrueCryptDeriveKey (hProv, Algid, hBaseData, dwFlags, phKey);
-
-	// todo: dump key bytes
 
 	// create message for log
 	swprintf_s(wszMsg, 1000, L"CryptDeriveKey (hProv = \"%p\", Algid = \"%u\", hBaseData = \"%p\", dwFlags = \"%d\", hKey = \"%p\") = %ls", hProv, Algid, hBaseData, dwFlags, *phKey, bResult ? L"TRUE" : L"FALSE");
