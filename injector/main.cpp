@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <Tlhelp32.h>
 #include <stdio.h>
+#include <time.h>
 
 // this function tries do get SE_DEBUG_NAME privileges
 // and returns boolean value as result of it
@@ -63,11 +64,13 @@ int main(void) {
 	DWORD dwInjected; // current size of list of already injected processes
 	DWORD dwSize = 0;
 	DWORD dwExitCode = 0;
-	WCHAR szRecord[1000] = {0};
+	WCHAR wszTime[100] = {0};
 	WCHAR LibPath [] = L"C:\\Windows\\ransomware_analyzer\\watcher.dll"; // path to injecting lib
 	LPVOID LoadLibraryAddr;
 	LPVOID LLParam;
 	BOOL flag; // flag
+	struct tm stTime;
+	time_t Time;
 
 	// try to get additional privileges
 	if (getPrivileges()) {
@@ -112,11 +115,16 @@ int main(void) {
 				CloseHandle(hThread);
 				CloseHandle(hProcess);
 
+				// generate time string
+				Time = time(NULL);
+				localtime_s(&stTime, &Time);
+				swprintf_s(wszTime, L"%04d.%02d.%02d %02d:%02d:%02d", stTime.tm_year + 1900, stTime.tm_mon + 1, stTime.tm_mday, stTime.tm_hour, stTime.tm_min, stTime.tm_sec);
+
 				// if dll is injected, add current process to list of already injected process and write string to console 
 				if (dwExitCode != 0) {
 					Injected[dwInjected] = PE32.th32ProcessID;
 					dwInjected++;
-					wprintf(L"%d : %ls - INJECT : OK!\n", PE32.th32ProcessID, PE32.szExeFile);
+					wprintf(L"%ls : PID = %d (%ls) - INJECT : OK!\n", wszTime, PE32.th32ProcessID, PE32.szExeFile);
 				}
 			}
 		}
